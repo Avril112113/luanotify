@@ -5,5 +5,5 @@ All Lua versions should be supported.
 
 See the [example](example.lua) for how to use it.  
 
-To build run `cargo build --features=mlua/luajit`.  
+To build, change `luajit` in [Cargo.toml](Cargo.toml) to the correct lua version and run `cargo build`.  
 *Requires rust/cargo*  

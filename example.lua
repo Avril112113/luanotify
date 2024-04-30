@@ -44,8 +44,7 @@ local watcher = LuaNotify.new()
 print("watcher", assert(watcher))
 
 -- Filter only txt files. (any valid glob acording to https://docs.rs/glob/latest/glob/)
--- Returns nothing.
-watcher:filter_by_glob("*.txt")
+print(assert(watcher:filter_by_glob("*.txt")))
 
 print("watch", watcher:watch("./I_DONT_EXIST", true))
 

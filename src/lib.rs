@@ -20,7 +20,7 @@ impl LuaUserData for LuaNotify {
 	fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
 		methods.add_meta_function("__tostring", |lua, ud: LuaAnyUserData| {
 			// NOTE: The formatting of the pointer differs to Lua.
-			// It is *simiar* to LuaJIT due to leading zeros after `0x`
+			// It is *simiar* to LuaJIT but differs in leading zeros after `0x`.
 			// Other versions don't have leading `0x` and has all leading zeros depending on pointer bitness.
 			return Ok(LuaValue::String(lua.create_string(format!("LuaNotify: {:p}", ud.to_pointer()))?));
 		});
@@ -136,9 +136,15 @@ impl LuaUserData for LuaNotify {
 			}
 		});
 
-		methods.add_method_mut("filter_by_glob", |_lua, this, glob: String| {
-			// TODO Error handling
-			let pattern = glob::Pattern::new(&glob).unwrap();
+		methods.add_method_mut("filter_by_glob", |lua, this, glob: String| {
+			let pattern = glob::Pattern::new(&glob);
+			if pattern.is_err() {
+				return Ok(LuaMultiValue::from_vec(vec![
+					LuaValue::Boolean(false),
+					LuaValue::String(lua.create_string(pattern.err().unwrap().to_string())?),
+				]));
+			}
+			let pattern = pattern.unwrap();
 
 			this.filters.lock().unwrap().push(Box::new(
 				move |event: notify::Event| {
@@ -146,7 +152,10 @@ impl LuaUserData for LuaNotify {
 				}
 			));
 
-			return Ok(());
+			return Ok(LuaMultiValue::from_vec(vec![
+				LuaValue::Boolean(true),
+				LuaValue::Nil,
+			]));
 		});
 	}
 }
