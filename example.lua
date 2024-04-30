@@ -36,37 +36,45 @@ local function tostring_value(value, parts, depth)
 end
 
 
----@class LuaNotify.Watcher
----@field watch fun(self, path:string, recursive:boolean?):boolean,string?
----@field unwatch fun(self, path:string):boolean,string?
----@field poll fun(self):LuaNotify.Event?
----@field filter_by_glob fun(self, glob:string)
-
----@class LuaNotify.Event
-
----@class LuaNotify
----@field new fun():LuaNotify.Watcher
+---@type LuaNotify
 local LuaNotify = require "luanotify"
 
-
+-- Create a new watcher.
 local watcher = LuaNotify.new()
-print(assert(watcher))
+print("watcher", assert(watcher))
 
-print(watcher:filter_by_glob("*.txt"))
+-- Filter only txt files. (any valid glob acording to https://docs.rs/glob/latest/glob/)
+-- Returns nothing.
+watcher:filter_by_glob("*.txt")
 
-print(assert(watcher:watch(".", true)))
+print("watch", watcher:watch("./I_DONT_EXIST", true))
 
+-- Watch a directory or a file recursively.
+print("watch", assert(watcher:watch(".", true)))
+-- unwatching does not work on sub-dirs of a watched directory.
+print("unwatch", assert(watcher:unwatch("./target")))  -- This does nothing
 
+-- We have began watching, so lets create/modify some stuff!
+print("Testing file open in write and writing some data.")
 local f = assert(io.open("t.txt", "w"))
-f:write("testing...")
+for i=1,10 do
+	f:write("testing...")
+end
 f:close()
 
+-- Windows can't detect opens and reads.
+-- Linux can.
+print("Testing file open in read")
 local f = assert(io.open("t.txt", "r"))
 f:close()
 
+print("Now lets retrive all the data.")
 while true do
+	-- Will return fs event data if available, otherwise will return nil.
 	local event = watcher:poll()
 	if event then
 		print(table.concat(tostring_value(event), ""))
+	else
+		break
 	end
 end

@@ -128,8 +128,8 @@ impl LuaUserData for LuaNotify {
 						("type", type_type),
 						("kind", type_kind),
 						("mode", type_mode),
-						("attrs", lua.to_value(&event.attrs)?),
 						("paths", lua.to_value(&event.paths)?),
+						("attrs", lua.to_value(&event.attrs)?),
 					]).unwrap()))
 				},
 				None => Ok(LuaValue::Nil),
