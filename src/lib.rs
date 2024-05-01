@@ -143,10 +143,10 @@ impl LuaUserData for LuaNotify {
 
 		methods.add_method_mut("filter_by_glob", |lua, this, glob: String| {
 			let pattern = glob::Pattern::new(&glob);
-			if pattern.is_err() {
+			if let Err(e) = pattern {
 				return Ok(LuaMultiValue::from_vec(vec![
 					LuaValue::Boolean(false),
-					LuaValue::String(lua.create_string(pattern.err().unwrap().to_string())?),
+					LuaValue::String(lua.create_string(e.to_string())?),
 				]));
 			}
 			let pattern = pattern.unwrap();
