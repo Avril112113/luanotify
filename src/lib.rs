@@ -3,7 +3,7 @@
 
 use std::{collections::VecDeque, path::Path, sync::{Arc, Mutex}};
 use mlua::prelude::*;
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{event::{AccessKind, AccessMode, CreateKind, DataChange, MetadataKind, ModifyKind, RemoveKind, RenameMode}, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 
 struct LuaNotify {
@@ -54,76 +54,81 @@ impl LuaUserData for LuaNotify {
 		methods.add_method_mut("poll", |lua, this, _:()| -> LuaResult<LuaValue> {
 			match this.events.lock().unwrap().pop_front() {
 				Some(event) => {
+					// Paths are not being normalized due to build issues on linux with the prior library.
 					// let norm_paths: Vec<PathBuf> = (&event.paths).iter().map(|path| Path::normalize_virtually(path).unwrap().into_path_buf()).collect();
-					// <pain>
-					// This is ugly, I hate it, but I don't know rust enough to fix it.
+
 					let type_type = match event.kind {
-						notify::EventKind::Access(_) => LuaValue::String(lua.create_string("access")?),
-						notify::EventKind::Create(_) => LuaValue::String(lua.create_string("create")?),
-						notify::EventKind::Modify(_) => LuaValue::String(lua.create_string("modify")?),
-						notify::EventKind::Remove(_) => LuaValue::String(lua.create_string("remove")?),
-						_ => LuaValue::String(lua.create_string("unknown")?),
+						EventKind::Access(_) => Some("access"),
+						EventKind::Create(_) => Some("create"),
+						EventKind::Modify(_) => Some("modify"),
+						EventKind::Remove(_) => Some("remove"),
+						_ => None,
 					};
+					let type_type = if let Some(s) = type_type { LuaValue::String(lua.create_string(s)?) } else { LuaValue::Nil };
+
 					let type_kind = match event.kind {
-						notify::EventKind::Access(kind) => match kind {
-							notify::event::AccessKind::Read => LuaValue::String(lua.create_string("read")?),
-							notify::event::AccessKind::Open(_) => LuaValue::String(lua.create_string("open")?),
-							notify::event::AccessKind::Close(_) => LuaValue::String(lua.create_string("close")?),
-							_ => LuaValue::Nil,
-						},
-						notify::EventKind::Create(kind) => match kind {
-							notify::event::CreateKind::File => LuaValue::String(lua.create_string("file")?),
-							notify::event::CreateKind::Folder => LuaValue::String(lua.create_string("folder")?),
-							_ => LuaValue::Nil,
-						},
-						notify::EventKind::Modify(kind) => match kind {
-							notify::event::ModifyKind::Data(_) => LuaValue::String(lua.create_string("data")?),
-							notify::event::ModifyKind::Metadata(_) => LuaValue::String(lua.create_string("metadata")?),
-							notify::event::ModifyKind::Name(_) => LuaValue::String(lua.create_string("name")?),
-							_ => LuaValue::Nil,
-						},
-						notify::EventKind::Remove(kind) => match kind {
-							notify::event::RemoveKind::File => LuaValue::String(lua.create_string("file")?),
-							notify::event::RemoveKind::Folder => LuaValue::String(lua.create_string("folder")?),
-							_ => LuaValue::Nil,
-						},
-						_ => LuaValue::Nil,
+						EventKind::Access(AccessKind::Read) => Some("read"),
+						EventKind::Access(AccessKind::Open(_)) => Some("open"),
+						EventKind::Access(AccessKind::Close(_)) => Some("close"),
+						
+						EventKind::Create(CreateKind::File) => Some("file"),
+						EventKind::Create(CreateKind::Folder) => Some("folder"),
+						
+						EventKind::Modify(ModifyKind::Data(_)) => Some("data"),
+						EventKind::Modify(ModifyKind::Metadata(_)) => Some("metadata"),
+						EventKind::Modify(ModifyKind::Name(_)) => Some("name"),
+						
+						EventKind::Remove(RemoveKind::File) => Some("file"),
+						EventKind::Remove(RemoveKind::Folder) => Some("folder"),
+
+						_ => None,
 					};
+					let type_kind = if let Some(s) = type_kind { LuaValue::String(lua.create_string(s)?) } else { LuaValue::Nil };
+
 					let type_mode = match event.kind {
-						notify::EventKind::Access(kind) => match kind {
-							notify::event::AccessKind::Open(mode) | notify::event::AccessKind::Close(mode) => match mode {
-								notify::event::AccessMode::Execute => LuaValue::String(lua.create_string("execute")?),
-								notify::event::AccessMode::Read => LuaValue::String(lua.create_string("read")?),
-								notify::event::AccessMode::Write => LuaValue::String(lua.create_string("write")?),
-								_ => LuaValue::Nil,
-							},
-							_ => LuaValue::Nil,
+						EventKind::Access(kind) => match kind {
+							AccessKind::Open(AccessMode::Execute) => Some("execute"),
+							AccessKind::Open(AccessMode::Read) => Some("read"),
+							AccessKind::Open(AccessMode::Write) => Some("write"),
+
+							AccessKind::Close(AccessMode::Execute) => Some("execute"),
+							AccessKind::Close(AccessMode::Read) => Some("read"),
+							AccessKind::Close(AccessMode::Write) => Some("write"),
+
+							_ => None,
 						},
-						notify::EventKind::Modify(kind) => match kind {
-							notify::event::ModifyKind::Data(change) => match change {
-								notify::event::DataChange::Size => LuaValue::String(lua.create_string("size")?),
-								notify::event::DataChange::Content => LuaValue::String(lua.create_string("content")?),
-								_ => LuaValue::Nil,
-							},
-							notify::event::ModifyKind::Metadata(meta_kind) => match meta_kind {
-								notify::event::MetadataKind::AccessTime => LuaValue::String(lua.create_string("access_time")?),
-								notify::event::MetadataKind::WriteTime => LuaValue::String(lua.create_string("write_time")?),
-								notify::event::MetadataKind::Permissions => LuaValue::String(lua.create_string("permissions")?),
-								notify::event::MetadataKind::Ownership => LuaValue::String(lua.create_string("ownership")?),
-								notify::event::MetadataKind::Extended => LuaValue::String(lua.create_string("extended")?),
-								_ => LuaValue::Nil,
-							},
-							notify::event::ModifyKind::Name(mode) => match mode {
-								notify::event::RenameMode::To => LuaValue::String(lua.create_string("to")?),
-								notify::event::RenameMode::From => LuaValue::String(lua.create_string("from")?),
-								notify::event::RenameMode::Both => LuaValue::String(lua.create_string("both")?),
-								_ => LuaValue::Nil,
-							},
-							_ => LuaValue::Nil,
+						EventKind::Create(kind) => match kind {
+							CreateKind::File => Some("file"),
+							CreateKind::Folder => Some("folder"),
+							
+							_ => None,
 						},
-						_ => LuaValue::Nil,
+						EventKind::Modify(kind) => match kind {
+							ModifyKind::Data(DataChange::Size) => Some("size"),
+							ModifyKind::Data(DataChange::Content) => Some("content"),
+
+							ModifyKind::Metadata(MetadataKind::AccessTime) => Some("access_time"),
+							ModifyKind::Metadata(MetadataKind::WriteTime) => Some("write_time"),
+							ModifyKind::Metadata(MetadataKind::Permissions) => Some("permissions"),
+							ModifyKind::Metadata(MetadataKind::Ownership) => Some("ownership"),
+							ModifyKind::Metadata(MetadataKind::Extended) => Some("extended"),
+
+							ModifyKind::Name(RenameMode::To) => Some("to"),
+							ModifyKind::Name(RenameMode::From) => Some("from"),
+							ModifyKind::Name(RenameMode::Both) => Some("both"),
+
+							_ => None,
+						},
+						EventKind::Remove(kind) => match kind {
+							RemoveKind::File => Some("file"),
+							RemoveKind::Folder => Some("folder"),
+							
+							_ => None,
+						},
+						_ => None,
 					};
-					// </pain>
+					let type_mode = if let Some(s) = type_mode { LuaValue::String(lua.create_string(s)?) } else { LuaValue::Nil };
+
 					Ok(LuaValue::Table(lua.create_table_from(vec![
 						("type", type_type),
 						("kind", type_kind),

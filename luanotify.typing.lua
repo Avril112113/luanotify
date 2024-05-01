@@ -16,3 +16,7 @@
 
 ---@class LuaNotify
 ---@field new fun():LuaNotify.Watcher
+
+---@type LuaNotify
+local _
+return _
