@@ -11,3 +11,11 @@ mlua = { version = "0.9", features = ["module", "serialize", "luajit"] }
 notify = { version = "6.1", features = ["serde"]}
 serde = "1.0"
 glob = "0.3"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+# Don't want to sacrifise speed or panic handling.
+# opt-level = "z"
+# panic = "abort"
