@@ -5,7 +5,8 @@
 ---@field watch fun(self, path:string, recursive:boolean?):boolean,string?
 ---@field unwatch fun(self, path:string):boolean,string?
 ---@field poll fun(self):LuaNotify.Event?
----@field filter_by_glob fun(self, glob:string)
+---@field whitelist_glob fun(self, glob:string)
+---@field blacklist_glob fun(self, glob:string)
 
 ---@class LuaNotify.Event
 ---@field type "unknown"|"access"|"create"|"modify"|"remove"

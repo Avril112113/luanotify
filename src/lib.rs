@@ -9,7 +9,8 @@ use notify::{event::{AccessKind, AccessMode, CreateKind, DataChange, MetadataKin
 struct LuaNotify {
 	watcher: RecommendedWatcher,
 	events: Arc<Mutex<VecDeque<notify::Event>>>,
-	filters: Arc<Mutex<Vec<Box<dyn Fn(notify::Event) -> bool + Send>>>>,
+	filters_any: Arc<Mutex<Vec<Box<dyn Fn(notify::Event) -> bool + Send>>>>,
+	filters_all: Arc<Mutex<Vec<Box<dyn Fn(notify::Event) -> bool + Send>>>>,
 }
 
 impl LuaUserData for LuaNotify {
@@ -141,7 +142,7 @@ impl LuaUserData for LuaNotify {
 			}
 		});
 
-		methods.add_method_mut("filter_by_glob", |lua, this, glob: String| {
+		methods.add_method_mut("whitelist_glob", |lua, this, glob: String| {
 			let pattern = glob::Pattern::new(&glob);
 			if let Err(e) = pattern {
 				return Ok(LuaMultiValue::from_vec(vec![
@@ -151,9 +152,31 @@ impl LuaUserData for LuaNotify {
 			}
 			let pattern = pattern.unwrap();
 
-			this.filters.lock().unwrap().push(Box::new(
+			this.filters_any.lock().unwrap().push(Box::new(
 				move |event: notify::Event| {
-					return event.paths.iter().all(|path: &std::path::PathBuf| pattern.matches_path(path));
+					return event.paths.iter().any(|path: &std::path::PathBuf| pattern.matches_path(path));
+				}
+			));
+
+			return Ok(LuaMultiValue::from_vec(vec![
+				LuaValue::Boolean(true),
+				LuaValue::Nil,
+			]));
+		});
+
+		methods.add_method_mut("blacklist_glob", |lua, this, glob: String| {
+			let pattern = glob::Pattern::new(&glob);
+			if let Err(e) = pattern {
+				return Ok(LuaMultiValue::from_vec(vec![
+					LuaValue::Boolean(false),
+					LuaValue::String(lua.create_string(e.to_string())?),
+				]));
+			}
+			let pattern = pattern.unwrap();
+
+			this.filters_all.lock().unwrap().push(Box::new(
+				move |event: notify::Event| {
+					return !event.paths.iter().any(|path: &std::path::PathBuf| pattern.matches_path(path));
 				}
 			));
 
@@ -168,15 +191,21 @@ impl LuaUserData for LuaNotify {
 
 fn luanotify_new(_lua: &Lua, _: ()) -> LuaResult<LuaNotify> {
 	let events = Arc::new(Mutex::new(VecDeque::new()));
-	let filters: Arc<Mutex<Vec<Box<dyn Fn(notify::Event) -> bool + Send>>>> = Arc::new(Mutex::new(Vec::new()));
+	let filters_any: Arc<Mutex<Vec<Box<dyn Fn(notify::Event) -> bool + Send>>>> = Arc::new(Mutex::new(Vec::new()));
+	let filters_all: Arc<Mutex<Vec<Box<dyn Fn(notify::Event) -> bool + Send>>>> = Arc::new(Mutex::new(Vec::new()));
 
 	let event_cpy = events.clone();
-	let filters_cpy = filters.clone();
+	let filters_any_cpy = filters_any.clone();
+	let filters_all_cpy = filters_all.clone();
 	let watcher = notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
 		match res {
 			Ok(e) => {
-				let locked_filters = filters_cpy.lock().unwrap();
-				if locked_filters.len() <= 0 || locked_filters.iter().all(|f| f(e.clone())) {
+				let locked_filters_any = filters_any_cpy.lock().unwrap();
+				let locked_filters_all = filters_all_cpy.lock().unwrap();
+				if
+					(locked_filters_any.len() <= 0 || locked_filters_any.iter().any(|f| f(e.clone()))) &&
+					(locked_filters_all.len() <= 0 || locked_filters_all.iter().all(|f| f(e.clone())))
+				{
 					event_cpy.lock().unwrap().push_back(e.clone())
 				}
 			},
@@ -187,7 +216,8 @@ fn luanotify_new(_lua: &Lua, _: ()) -> LuaResult<LuaNotify> {
 	return Ok(LuaNotify {
 		watcher,
 		events,
-		filters,
+		filters_any,
+		filters_all,
 	});
 }
 

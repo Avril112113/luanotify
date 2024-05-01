@@ -43,8 +43,17 @@ local LuaNotify = require "luanotify"
 local watcher = LuaNotify.new()
 print("watcher", assert(watcher))
 
--- Filter only txt files. (any valid glob acording to https://docs.rs/glob/latest/glob/)
-print(assert(watcher:filter_by_glob("*.txt")))
+-- For an event to be recived,
+-- either no whitelists have been set, or any of the whitelists pass
+-- AND
+-- either no blacklists have been set, or all of the blacklists don't match
+
+-- Filter only txt files or lua files. (any valid glob acording to https://docs.rs/glob/latest/glob/)
+print(assert(watcher:whitelist_glob("*.txt")))
+print(assert(watcher:whitelist_glob("*.lua")))
+
+-- Ignore any lua files with 'test' in the name
+print(assert(watcher:blacklist_glob("*/*test*.txt")))
 
 print("watch", watcher:watch("./I_DONT_EXIST", true))
 
@@ -65,6 +74,12 @@ f:close()
 -- Linux can.
 print("Testing file open in read")
 local f = assert(io.open("t.txt", "r"))
+f:close()
+
+-- Windows can't detect opens and reads.
+-- Linux can.
+print("Testing blacklisted file")
+local f = assert(io.open("t_foo_test_bar.txt", "w"))
 f:close()
 
 print("Now lets retrive all the data.")
